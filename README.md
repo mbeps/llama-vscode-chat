@@ -1,6 +1,6 @@
-# Llama.cpp Provider for GitHub Copilot Chat
+# Llama.cpp Provider for GitHub Copilot
 
-This extension integrates Llama.cpp models into GitHub Copilot Chat in VS Code.
+This extension integrates Llama.cpp models into GitHub Copilot in VS Code.
 
 > NOTE: My computer is not powerful enough to run decent models locally so this extension wasn't tested fully. Feel free to contribute if this is something that is useful.
 
@@ -25,11 +25,11 @@ This extension integrates Llama.cpp models into GitHub Copilot Chat in VS Code.
 
 The extension uses a base provider class for OpenAI-compatible chat APIs. The Llama.cpp provider extends this base to connect to a local Llama.cpp server. It handles model fetching, message conversion, and streaming responses. Tool calling is supported through OpenAI-compatible formats.
 
-## Setting Up Project
+## Setting Up Project Locally
 
 1. Clone the repository.
 ```sh
-git clone https://github.com/your-org/llama-vscode-chat.git
+git clone https://github.com/mbeps/llama-vscode-chat.git
 ```
 
 2. Install dependencies.
@@ -44,9 +44,11 @@ npm run compile
 
 4. Open in VS Code and run the extension.
 
-## Usage
+## Configuration
 
-Install the extension from the marketplace. Configure the Llama.cpp server URL via the command palette. Select the Llama.cpp provider in the chat interface. Start chatting with the integrated models.
+1. Open the command palette.
+2. Select "Llama.cpp: Set Server URL"
+3. Configure the URL of your Llama.cpp server (e.g., `http://localhost:8000`).
 
 ## References
 

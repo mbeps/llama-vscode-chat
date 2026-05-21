@@ -3,14 +3,15 @@ import * as vscode from "vscode";
 import {
     CancellationToken,
     LanguageModelChatInformation,
-    LanguageModelChatMessage,
-    LanguageModelChatProvider,
+    LanguageModelChatRequestMessage,
+    PrepareLanguageModelChatModelOptions,
     ProvideLanguageModelChatResponseOptions,
     LanguageModelResponsePart,
     Progress,
 } from "vscode";
 import { BaseChatModelProvider, DEFAULT_CONTEXT_LENGTH, DEFAULT_MAX_OUTPUT_TOKENS } from "./base-provider";
 import { convertMessages, convertTools, validateRequest } from "./utils";
+import { ExtendedLanguageModelChatInformation } from "./types";
 
 /**
  * Chat model provider for Llama.cpp servers.
@@ -39,9 +40,9 @@ export class LlamaCppChatModelProvider extends BaseChatModelProvider {
      * @returns Promise resolving to an array of available models.
      */
     async provideLanguageModelChatInformation(
-        options: { silent: boolean },
-        token: CancellationToken
-    ): Promise<LanguageModelChatInformation[]> {
+        options: PrepareLanguageModelChatModelOptions,
+        _token: CancellationToken
+    ): Promise<ExtendedLanguageModelChatInformation[]> {
         const serverUrl = await this.getServerUrl();
         const apiKey = await this.getApiKey(); // Optional
 
@@ -59,6 +60,8 @@ export class LlamaCppChatModelProvider extends BaseChatModelProvider {
                     toolCalling: true, // Assuming modern models support it
                     imageInput: false, // Could be true for vision models, but safe default is false
                 },
+                isUserSelectable: true,
+                metadata: {},
             }));
         } catch (err) {
             if (!options.silent) {
@@ -81,7 +84,7 @@ export class LlamaCppChatModelProvider extends BaseChatModelProvider {
      */
     async provideLanguageModelChatResponse(
         model: LanguageModelChatInformation,
-        messages: readonly LanguageModelChatMessage[],
+        messages: readonly LanguageModelChatRequestMessage[],
         options: ProvideLanguageModelChatResponseOptions,
         progress: Progress<LanguageModelResponsePart>,
         token: CancellationToken
@@ -127,12 +130,15 @@ export class LlamaCppChatModelProvider extends BaseChatModelProvider {
             headers["Authorization"] = `Bearer ${apiKey}`;
         }
 
+        const controller = new AbortController();
+        const disposable = token.onCancellationRequested(() => controller.abort());
+
         try {
             const response = await fetch(`${serverUrl}/v1/chat/completions`, {
                 method: "POST",
                 headers,
                 body: JSON.stringify(requestBody),
-                signal: token.isCancellationRequested ? AbortSignal.abort() : undefined,
+                signal: controller.signal,
             });
 
             if (!response.ok) {
@@ -146,8 +152,13 @@ export class LlamaCppChatModelProvider extends BaseChatModelProvider {
 
             await this.processStreamingResponse(response.body, progress, token);
         } catch (err) {
+            if (token.isCancellationRequested) {
+                return;
+            }
             console.error("[Llama.cpp Provider] Chat request failed", err);
             throw err;
+        } finally {
+            disposable.dispose();
         }
     }
 

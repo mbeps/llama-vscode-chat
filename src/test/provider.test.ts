@@ -1,6 +1,7 @@
 import * as assert from "assert";
 import * as vscode from "vscode";
 import { LlamaCppChatModelProvider } from "../llama-provider";
+import { OpenAIChatMessage } from "../types";
 import { convertMessages, convertTools, validateRequest } from "../utils";
 
 // Mock SecretStorage
@@ -39,7 +40,7 @@ suite("Llama.cpp Chat Provider Extension", () => {
 
         test("provideTokenCount calculation for text", async () => {
             const count = await provider.provideTokenCount(
-                {} as any,
+                {} as vscode.LanguageModelChatInformation,
                 "hello world",
                 new vscode.CancellationTokenSource().token
             );
@@ -61,7 +62,7 @@ suite("Llama.cpp Chat Provider Extension", () => {
                     name: undefined,
                 },
             ];
-            const out: any[] = convertMessages(messages);
+            const out: OpenAIChatMessage[] = convertMessages(messages);
             assert.deepEqual(out, [
                 { role: "user", content: "hi" },
                 { role: "assistant", content: "hello" },
@@ -81,12 +82,12 @@ suite("Llama.cpp Chat Provider Extension", () => {
                     name: undefined,
                 },
             ];
-            const out: any[] = convertMessages(messages);
+            const out: OpenAIChatMessage[] = convertMessages(messages);
             // Expectation: merged into one message
             assert.strictEqual(out.length, 1);
             assert.strictEqual(out[0].role, "user");
-            assert.ok(out[0].content.includes("context"));
-            assert.ok(out[0].content.includes("query"));
+            assert.ok(out[0].content!.includes("context"));
+            assert.ok(out[0].content!.includes("query"));
         });
 
         test("merges consecutive assistant messages (text + tool call)", () => {
@@ -102,7 +103,7 @@ suite("Llama.cpp Chat Provider Extension", () => {
                     name: undefined,
                 },
             ];
-            const out: any[] = convertMessages(messages);
+            const out: OpenAIChatMessage[] = convertMessages(messages);
             assert.strictEqual(out.length, 1);
             assert.strictEqual(out[0].role, "assistant");
             assert.strictEqual(out[0].content, "thinking...");
@@ -124,12 +125,12 @@ suite("Llama.cpp Chat Provider Extension", () => {
                     name: undefined,
                 },
             ];
-            const out: any[] = convertMessages(messages);
+            const out: OpenAIChatMessage[] = convertMessages(messages);
             // Expectation: merged into single User message with combined text
             assert.strictEqual(out.length, 1);
             assert.strictEqual(out[0].role, "user");
-            assert.ok(out[0].content.includes("res1"));
-            assert.ok(out[0].content.includes("res2"));
+            assert.ok(out[0].content!.includes("res1"));
+            assert.ok(out[0].content!.includes("res2"));
         });
         test("merges user (text) into tool message", () => {
             const messages: vscode.LanguageModelChatMessage[] = [
@@ -144,11 +145,11 @@ suite("Llama.cpp Chat Provider Extension", () => {
                    name: undefined,
                },
            ];
-           const out: any[] = convertMessages(messages);
+           const out: OpenAIChatMessage[] = convertMessages(messages);
            assert.strictEqual(out.length, 1);
            assert.strictEqual(out[0].role, "user");
-           assert.ok(out[0].content.includes("context"));
-           assert.ok(out[0].content.includes("res1"));
+           assert.ok(out[0].content!.includes("context"));
+           assert.ok(out[0].content!.includes("res1"));
        });
 
        test("merges tool message and user (text)", () => {
@@ -164,39 +165,20 @@ suite("Llama.cpp Chat Provider Extension", () => {
                   name: undefined,
               },
           ];
-          const out: any[] = convertMessages(messages);
+          const out: OpenAIChatMessage[] = convertMessages(messages);
           assert.strictEqual(out.length, 1);
           assert.strictEqual(out[0].role, "user");
-          assert.ok(out[0].content.includes("res1"));
-          assert.ok(out[0].content.includes("followup"));
+          assert.ok(out[0].content!.includes("res1"));
+          assert.ok(out[0].content!.includes("followup"));
       });
 
       test("hoists system messages to the top", () => {
-          const messages: vscode.LanguageModelChatMessage[] = [
-                {
-                    role: vscode.LanguageModelChatMessageRole.User,
-                    content: [new vscode.LanguageModelTextPart("user1")],
-                    name: undefined,
-                },
-                // System message in the middle (e.g. injected context)
-                {
-                    role: 0 as any, // "System" isn't in the enum but mapRole handles strict check or fallback?
-                    // Wait, mapRole default is System. Let's force it via a mock or just assume default is used if not User/Assistant.
-                    // Actually, LanguageModelChatMessageRole has User(1) and Assistant(2). 0 or other might be System?
-                    // VS Code doesn't expose System role directly in the enum usually, but Copilot sends it?
-                    // Let's use a cast to simulate "System" if the enum doesn't have it, or rely on mapRole fallback.
-                    // mapRole implementation: if r===USER return user, if r===ASSISTANT return assistant, else return system.
-                    // So passing specific unrelated number works.
-                } as vscode.LanguageModelChatMessage, // Trick to pass invalid role?
-          ];
-
-          // Actually, let's just make a cleaner test with manual objects if the type allows
           // The type is 'readonly vscode.LanguageModelChatMessage[]'.
           const sysMsg = { role: 3, content: [new vscode.LanguageModelTextPart("sys instruction")] } as unknown as vscode.LanguageModelChatMessage;
           const userMsg = { role: vscode.LanguageModelChatMessageRole.User, content: [new vscode.LanguageModelTextPart("hi")] } as vscode.LanguageModelChatMessage;
 
           const msgs = [userMsg, sysMsg];
-          const out: any[] = convertMessages(msgs);
+          const out: OpenAIChatMessage[] = convertMessages(msgs);
 
           // Expect: [System, User]
           assert.strictEqual(out.length, 2);

@@ -1,3 +1,5 @@
+import * as vscode from "vscode";
+
 /**
  * OpenAI function-call entry emitted by assistant messages.
  * Represents a tool call initiated by the assistant in a chat response.
@@ -16,6 +18,16 @@ export interface OpenAIToolCall {
 	 * Details of the function to call, including name and arguments.
 	 */
 	function: { name: string; arguments: string };
+}
+
+/**
+ * Extended VS Code LanguageModelChatInformation to include custom properties.
+ */
+export interface ExtendedLanguageModelChatInformation extends vscode.LanguageModelChatInformation {
+	/**
+	 * Whether the model is user selectable in the model picker.
+	 */
+	isUserSelectable?: boolean;
 }
 
 /**

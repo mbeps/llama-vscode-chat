@@ -44,7 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
 				await context.secrets.delete("llamacpp.serverUrl");
 			}
 
-
+			llamaProvider.notifyConfigChanged();
 
 			vscode.window.showInformationMessage("Llama.cpp configuration saved.");
 		})
