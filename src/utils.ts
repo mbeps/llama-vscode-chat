@@ -300,7 +300,7 @@ export function convertMessages(messages: readonly vscode.LanguageModelChatReque
  */
 export function convertTools(options: vscode.ProvideLanguageModelChatResponseOptions): {
 	tools?: OpenAIFunctionToolDef[];
-	tool_choice?: "auto" | { type: "function"; function: { name: string } };
+	tool_choice?: "auto" | "required" | { type: "function"; function: { name: string } };
 } {
 	const tools = options.tools ?? [];
 	if (!tools || tools.length === 0) {
@@ -323,13 +323,13 @@ export function convertTools(options: vscode.ProvideLanguageModelChatResponseOpt
 			} satisfies OpenAIFunctionToolDef;
 		});
 
-	let tool_choice: "auto" | { type: "function"; function: { name: string } } = "auto";
+	let tool_choice: "auto" | "required" | { type: "function"; function: { name: string } } = "auto";
 	if (options.toolMode === vscode.LanguageModelChatToolMode.Required) {
-		if (tools.length !== 1) {
-            console.error("[Llama.cpp Chat Provider] ToolMode.Required but multiple tools:", tools.length);
-            throw new Error("LanguageModelChatToolMode.Required is not supported with more than one tool");
+		if (tools.length === 1) {
+			tool_choice = { type: "function", function: { name: sanitizeFunctionName(tools[0].name) } };
+		} else {
+			tool_choice = "required";
 		}
-		tool_choice = { type: "function", function: { name: sanitizeFunctionName(tools[0].name) } };
 	}
 
 	return { tools: toolDefs, tool_choice };

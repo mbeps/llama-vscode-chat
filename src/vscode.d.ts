@@ -20598,6 +20598,11 @@ declare module 'vscode' {
 		 * Various features that the model supports such as tool calling or image input.
 		 */
 		readonly capabilities: LanguageModelChatCapabilities;
+
+		/**
+		 * Metadata about the language model.
+		 */
+		readonly metadata?: { [key: string]: any };
 	}
 
 	/**

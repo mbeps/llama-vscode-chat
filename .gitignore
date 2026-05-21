@@ -4,3 +4,12 @@ node_modules
 .vscode-test/
 *.vsix
 .DS_Store
+
+wiki/**
+docs/**
+reports/**
+
+copilot-instructions.md
+AGENT.md
+CLAUDE.md
+GEMINI.md

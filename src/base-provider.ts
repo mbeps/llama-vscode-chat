@@ -3,11 +3,13 @@ import * as vscode from "vscode";
 import {
     CancellationToken,
     LanguageModelChatInformation,
-    LanguageModelChatMessage,
+    LanguageModelChatRequestMessage,
     LanguageModelChatProvider,
+    PrepareLanguageModelChatModelOptions,
     ProvideLanguageModelChatResponseOptions,
     LanguageModelResponsePart,
     Progress,
+    EventEmitter,
 } from "vscode";
 import { tryParseJSONObject } from "./utils";
 
@@ -21,6 +23,10 @@ export const DEFAULT_CONTEXT_LENGTH = 128000;
  *
  */
 export abstract class BaseChatModelProvider implements LanguageModelChatProvider {
+    /** Event fired when the list of available models changes. */
+    private readonly _onDidChangeLanguageModelChatInformation = new EventEmitter<void>();
+    public readonly onDidChangeLanguageModelChatInformation = this._onDidChangeLanguageModelChatInformation.event;
+
     /** Buffer for assembling streamed tool calls by index. */
     private _toolCallBuffers: Map<number, { id?: string; name?: string; args: string }> = new Map<
         number,
@@ -58,6 +64,13 @@ export abstract class BaseChatModelProvider implements LanguageModelChatProvider
     constructor(protected readonly secrets: vscode.SecretStorage) {}
 
     /**
+     * Notify VS Code that the provider configuration has changed and model information should be refreshed.
+     */
+    public notifyConfigChanged(): void {
+        this._onDidChangeLanguageModelChatInformation.fire();
+    }
+
+    /**
      * Provides information about available language models.
      * Subclasses must implement this to return model details from their API.
      *
@@ -66,7 +79,7 @@ export abstract class BaseChatModelProvider implements LanguageModelChatProvider
      * @returns Promise resolving to an array of language model information.
      */
     abstract provideLanguageModelChatInformation(
-        options: { silent: boolean },
+        options: PrepareLanguageModelChatModelOptions,
         token: CancellationToken
     ): Promise<LanguageModelChatInformation[]>;
 
@@ -83,7 +96,7 @@ export abstract class BaseChatModelProvider implements LanguageModelChatProvider
      */
     abstract provideLanguageModelChatResponse(
         model: LanguageModelChatInformation,
-        messages: readonly LanguageModelChatMessage[],
+        messages: readonly LanguageModelChatRequestMessage[],
         options: ProvideLanguageModelChatResponseOptions,
         progress: Progress<LanguageModelResponsePart>,
         token: CancellationToken
@@ -96,7 +109,7 @@ export abstract class BaseChatModelProvider implements LanguageModelChatProvider
      * @param msgs - Array of chat messages to estimate tokens for.
      * @returns Estimated number of tokens.
      */
-    protected estimateMessagesTokens(msgs: readonly vscode.LanguageModelChatMessage[]): number {
+    protected estimateMessagesTokens(msgs: readonly vscode.LanguageModelChatRequestMessage[]): number {
         let total = 0;
         for (const m of msgs) {
             for (const part of m.content) {
@@ -140,7 +153,7 @@ export abstract class BaseChatModelProvider implements LanguageModelChatProvider
      */
     async provideTokenCount(
         model: LanguageModelChatInformation,
-        text: string | LanguageModelChatMessage,
+        text: string | LanguageModelChatRequestMessage,
         _token: CancellationToken
     ): Promise<number> {
         if (typeof text === "string") {
@@ -254,6 +267,8 @@ export abstract class BaseChatModelProvider implements LanguageModelChatProvider
                 (choice as Record<string, unknown> | undefined)?.thinking ?? (deltaObj as Record<string, unknown> | undefined)?.thinking;
             if (maybeThinking !== undefined) {
                 const vsAny = vscode as unknown as Record<string, unknown>;
+                // Note: Thinking parts are currently a proposed VS Code API. We use a runtime probe
+                // to maintain compatibility with versions that do not yet expose this type.
                 const ThinkingCtor = vsAny["LanguageModelThinkingPart"] as
                     | (new (text: string, id?: string, metadata?: unknown) => unknown)
                     | undefined;
