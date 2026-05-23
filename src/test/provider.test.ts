@@ -30,12 +30,22 @@ suite("Llama.cpp Chat Provider Extension", () => {
         const provider = new LlamaCppChatModelProvider(secretStorage, "test-user-agent");
 
         test("provideLanguageModelChatInformation returns array (defaults)", async () => {
+            // Mock the internal fetchServerProps and fetchModels to return predictable data
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (provider as any).fetchServerProps = async () => 128000;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (provider as any).fetchModels = async () => [{ id: "mock-model" }];
+
             const infos = await provider.provideLanguageModelChatInformation(
                 { silent: true },
                 new vscode.CancellationTokenSource().token
             );
             // It might fail if no server running, but it returns array (empty or populated)
             assert.ok(Array.isArray(infos));
+            if (infos.length > 0) {
+                assert.strictEqual(infos[0].maxInputTokens, 112000);
+                assert.strictEqual(infos[0].maxOutputTokens, 16000);
+            }
         });
 
         test("provideTokenCount calculation for text", async () => {

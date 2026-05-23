@@ -11,7 +11,7 @@ import {
 } from "vscode";
 import { BaseChatModelProvider, DEFAULT_CONTEXT_LENGTH, DEFAULT_MAX_OUTPUT_TOKENS } from "./base-provider";
 import { convertMessages, convertTools, validateRequest } from "./utils";
-import { ExtendedLanguageModelChatInformation } from "./types";
+import { ExtendedLanguageModelChatInformation, LlamaCppServerProps } from "./types";
 
 /**
  * Chat model provider for Llama.cpp servers.
@@ -20,6 +20,11 @@ import { ExtendedLanguageModelChatInformation } from "./types";
  *
  */
 export class LlamaCppChatModelProvider extends BaseChatModelProvider {
+    /**
+     * Cached context size from the server.
+     */
+    private _cachedContextSize: number | undefined;
+
     /**
      * Creates a new Llama.cpp chat model provider.
      * Initializes the provider with secret storage and user agent for API requests.
@@ -47,15 +52,26 @@ export class LlamaCppChatModelProvider extends BaseChatModelProvider {
         const apiKey = await this.getApiKey(); // Optional
 
         try {
-            const models = await this.fetchModels(serverUrl, apiKey);
+            // Parallelize model and property fetching
+            const [n_ctx, models] = await Promise.all([
+                this.fetchServerProps(serverUrl, apiKey),
+                this.fetchModels(serverUrl, apiKey),
+            ]);
+
+            const contextSize = n_ctx ?? DEFAULT_CONTEXT_LENGTH;
+            this._cachedContextSize = contextSize;
+
+            const maxOutput = Math.min(DEFAULT_MAX_OUTPUT_TOKENS, Math.floor(contextSize / 2));
+            const maxInput = Math.max(1, contextSize - maxOutput);
+
             return models.map(model => ({
                 id: model.id,
                 name: model.id, // Llama.cpp usually returns filename as ID
                 tooltip: `Llama.cpp model: ${model.id}`,
                 family: "llama-cpp",
                 version: "1.0.0",
-                maxInputTokens: DEFAULT_CONTEXT_LENGTH - DEFAULT_MAX_OUTPUT_TOKENS, // Rough estimate or configurable
-                maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+                maxInputTokens: maxInput,
+                maxOutputTokens: maxOutput,
                 capabilities: {
                     toolCalling: true, // Assuming modern models support it
                     imageInput: false, // Could be true for vision models, but safe default is false
@@ -68,6 +84,44 @@ export class LlamaCppChatModelProvider extends BaseChatModelProvider {
                 console.error("[Llama.cpp Provider] Failed to fetch models", err);
             }
             return []; // Return empty if failed or server not running
+        }
+    }
+
+    /**
+     * Fetches server properties from the Llama.cpp `/props` endpoint.
+     * Extracts the default context size (n_ctx) if available.
+     *
+     * @param serverUrl - The base URL of the Llama.cpp server.
+     * @param apiKey - Optional API key for authentication.
+     * @returns Promise resolving to the context size, or undefined if fetch fails.
+     */
+    private async fetchServerProps(serverUrl: string, apiKey?: string): Promise<number | undefined> {
+        try {
+            const headers: Record<string, string> = {
+                "Content-Type": "application/json",
+                "User-Agent": this.userAgent,
+            };
+            if (apiKey) {
+                headers["Authorization"] = `Bearer ${apiKey}`;
+            }
+
+            const response = await fetch(`${serverUrl}/props`, {
+                method: "GET",
+                headers,
+            });
+
+            if (!response.ok) {
+                return undefined;
+            }
+
+            const data = (await response.json()) as LlamaCppServerProps;
+            const contextSize = data.default_generation_settings?.n_ctx;
+
+            // Sanity check: ignore n_ctx values below 1000
+            return (contextSize && contextSize >= 1000) ? contextSize : undefined;
+        } catch (err) {
+            console.warn("[Llama.cpp Provider] Failed to fetch server props", err);
+            return undefined;
         }
     }
 
@@ -99,19 +153,16 @@ export class LlamaCppChatModelProvider extends BaseChatModelProvider {
         // Check token limits roughly
         const inputTokenCount = this.estimateMessagesTokens(messages);
         const toolTokenCount = this.estimateToolTokens(toolConfig.tools);
-        const tokenLimit = Math.max(1, model.maxInputTokens);
-        if (inputTokenCount + toolTokenCount > tokenLimit) {
-            console.warn(
-                `[Llama.cpp Provider] Message tokens (${inputTokenCount} + ${toolTokenCount}) exceed limit ${tokenLimit}`
-            );
-             // Proceed anyway as local models might handle it or truncate
-        }
+        const totalInput = inputTokenCount + toolTokenCount;
+        const contextSize = this._cachedContextSize ?? DEFAULT_CONTEXT_LENGTH;
+        const remainingContext = Math.max(1, contextSize - totalInput);
+        const requestedMaxTokens = options.modelOptions?.max_tokens || 4096;
 
         const requestBody: Record<string, unknown> = {
             model: model.id,
             messages: openaiMessages,
             stream: true,
-            max_tokens: options.modelOptions?.max_tokens || 4096,
+            max_tokens: Math.min(requestedMaxTokens, remainingContext),
             temperature: options.modelOptions?.temperature ?? 0.7,
         };
 
