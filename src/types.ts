@@ -74,7 +74,23 @@ export interface OpenAIChatMessage {
 	tool_call_id?: string;
 }
 
-
+/**
+ * Llama.cpp server properties response from the `/props` endpoint.
+ * Contains default generation settings including context size.
+ */
+export interface LlamaCppServerProps {
+	/**
+	 * Default generation settings for the server.
+	 */
+	default_generation_settings: {
+		/**
+		 * The default context size (number of tokens).
+		 */
+		n_ctx: number;
+		[key: string]: unknown;
+	};
+	[key: string]: unknown;
+}
 
 /**
  * Buffer used to accumulate streamed tool call parts until arguments are valid JSON.
